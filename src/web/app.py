@@ -14,7 +14,8 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from db.database import (
     get_stats, get_malicious_hashes, add_malicious_hash, 
-    remove_malicious_hash, get_detection_records, delete_detection_record
+    remove_malicious_hash, get_detection_records, delete_detection_record,
+    get_trusted_hashes, add_trusted_hash, remove_trusted_hash, is_trusted_hash
 )
 
 # 数据库文件路径
@@ -34,6 +35,10 @@ app.add_middleware(
 # 数据模型
 class MaliciousHash(BaseModel):
     hash_value: str
+    description: Optional[str] = ""
+
+class TrustedHash(BaseModel):
+    hash: str
     description: Optional[str] = ""
 
 class DetectionRecord(BaseModel):
@@ -111,6 +116,54 @@ async def get_stats_api():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询时出错: {e}")
+
+# 信任哈希相关API
+@app.post("/api/trusted-hashes")
+async def add_trusted_hash_api(hash_data: TrustedHash):
+    """添加信任hash到信任列表"""
+    try:
+        add_trusted_hash(hash_data.hash, hash_data.description)
+        return {"status": "success", "message": f"已将hash {hash_data.hash} 添加到信任列表"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"添加时出错: {e}")
+
+@app.delete("/api/trusted-hashes/{hash_value}")
+async def remove_trusted_hash_api(hash_value: str):
+    """从信任列表中移除hash"""
+    try:
+        success = remove_trusted_hash(hash_value)
+        if success:
+            return {"status": "success", "message": f"已从信任列表中移除hash {hash_value}"}
+        else:
+            raise HTTPException(status_code=404, detail=f"信任列表中未找到hash {hash_value}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"删除时出错: {e}")
+
+@app.get("/api/trusted-hashes")
+async def get_trusted_hashes_api(skip: int = 0, limit: int = Query(100, le=1000), search: str = ""):
+    """获取所有信任hash"""
+    try:
+        all_hashes = get_trusted_hashes()
+        
+        # 如果有搜索条件，进行过滤
+        if search:
+            search_lower = search.lower()
+            all_hashes = [h for h in all_hashes if search_lower in h["hash"].lower() or (h["description"] and search_lower in h["description"].lower())]
+        
+        # 实现分页
+        paginated_hashes = all_hashes[skip:skip+limit]
+        return {"status": "success", "count": len(paginated_hashes), "trusted": paginated_hashes}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询时出错: {e}")
+
+@app.get("/api/check-trusted/{hash_value}")
+async def check_trusted_hash_api(hash_value: str):
+    """检查hash是否在信任列表中"""
+    try:
+        is_trusted = is_trusted_hash(hash_value)
+        return {"is_trusted": is_trusted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"检查时出错: {e}")
 
 
 @app.get("/", response_class=FileResponse)

@@ -12,7 +12,8 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from db.database import (
     init_database, get_stats, get_malicious_hashes, add_malicious_hash,
-    remove_malicious_hash, get_detection_records, delete_detection_record
+    remove_malicious_hash, get_detection_records, delete_detection_record,
+    get_trusted_hashes, add_trusted_hash, remove_trusted_hash, is_trusted_hash
 )
 
 app = FastAPI()
@@ -20,10 +21,10 @@ app = FastAPI()
 # 初始化数据库
 init_database()
 
-# 读取web_admin.html文件
+# 读取web.html文件
 def get_web_admin_html():
     """读取web管理界面HTML文件"""
-    html_file_path = os.path.join(os.path.dirname(__file__), '..', '..', 'web_admin.html')
+    html_file_path = os.path.join(os.path.dirname(__file__), 'web.html')
     try:
         with open(html_file_path, 'r', encoding='utf-8') as f:
             return f.read()
@@ -149,5 +150,58 @@ async def api_delete_detection_record(record_id: int):
             return {"message": f"已删除检测记录 {record_id}"}
         else:
             raise HTTPException(status_code=404, detail="未找到指定的检测记录")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/trusted-hashes")
+async def api_trusted_hashes(page: int = 1, page_size: int = 20, search: Optional[str] = None):
+    """获取信任哈希列表"""
+    all_trusted = get_trusted_hashes()
+    
+    # 搜索过滤
+    if search:
+        all_trusted = [t for t in all_trusted if search.lower() in t['hash'].lower() or 
+                       (t['description'] and search.lower() in t['description'].lower())]
+    
+    # 分页处理
+    total = len(all_trusted)
+    start = (page - 1) * page_size
+    end = start + page_size
+    trusted = all_trusted[start:end]
+    
+    return {
+        "trusted": trusted,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+@app.post("/api/trusted-hashes")
+async def api_add_trusted_hash(hash: str, description: str = ""):
+    """添加信任hash"""
+    try:
+        add_trusted_hash(hash, description)
+        return {"message": f"已将hash {hash} 添加到信任列表"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/trusted-hashes/{hash_value}")
+async def api_remove_trusted_hash(hash_value: str):
+    """从信任列表中移除hash"""
+    try:
+        success = remove_trusted_hash(hash_value)
+        if success:
+            return {"message": f"已从信任列表中移除hash {hash_value}"}
+        else:
+            raise HTTPException(status_code=404, detail="未找到指定的hash")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/check-trusted/{hash_value}")
+async def api_check_trusted(hash_value: str):
+    """检查hash是否在信任列表中"""
+    try:
+        is_trusted = is_trusted_hash(hash_value)
+        return {"is_trusted": is_trusted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

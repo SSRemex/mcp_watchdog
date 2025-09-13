@@ -217,6 +217,16 @@
             color: var(--danger-color);
         }
         
+        .badge-safe {
+            background-color: #e6f4ea;
+            color: #137333;
+        }
+        
+        .badge-malicious {
+            background-color: #fce8e6;
+            color: var(--danger-color);
+        }
+        
         .actions {
             display: flex;
             gap: 8px;
@@ -557,6 +567,7 @@
         <div class="tabs">
             <button class="tab-button active" data-tab="dashboard">仪表板</button>
             <button class="tab-button" data-tab="virus">病毒库管理</button>
+            <button class="tab-button" data-tab="trusted-db">信任MCP管理</button>
             <button class="tab-button" data-tab="records">检测记录</button>
         </div>
         
@@ -631,6 +642,54 @@
             </div>
         </div>
         
+        <!-- 信任MCP管理内容 -->
+        <div id="trusted-db" class="tab-content">
+            <div class="card">
+                <h2 class="card-title">
+                    添加信任MCP
+                    <button id="refresh-trusted">刷新</button>
+                </h2>
+                <form id="add-trusted-form">
+                    <div class="form-group">
+                        <label for="trusted-hash">Hash值</label>
+                        <input type="text" id="trusted-hash" placeholder="输入MCP代码的SHA256哈希值" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="trusted-description">描述</label>
+                        <textarea id="trusted-description" placeholder="输入描述信息"></textarea>
+                    </div>
+                    <button type="submit">添加到信任列表</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">信任MCP列表</h2>
+                <div class="search-box">
+                    <input type="text" id="trusted-search" placeholder="搜索Hash或描述...">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Hash值</th>
+                            <th>描述</th>
+                            <th>添加时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trusted-list">
+                        <tr>
+                            <td colspan="4" style="text-align: center;">加载中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <button id="prev-trusted" disabled>上一页</button>
+                    <span id="trusted-page-info">第 1 页</span>
+                    <button id="next-trusted">下一页</button>
+                </div>
+            </div>
+        </div>
+        
         <!-- 检测记录内容 -->
         <div id="records" class="tab-content">
             <div class="card">
@@ -671,10 +730,12 @@
         const API_BASE = '/api';
         let currentPage = {
             virus: 0,
+            trusted: 0,
             records: 0
         };
         let currentSearch = {
             virus: '',
+            trusted: '',
             records: ''
         };
 
@@ -699,6 +760,7 @@
             fetchStats();
             loadRecentRecords();
             loadVirusList();
+            loadTrustedList();
             loadRecordsList();
         });
 
@@ -725,6 +787,8 @@
                         loadRecentRecords();
                     } else if (tabId === 'virus') {
                         loadVirusList();
+                    } else if (tabId === 'trusted-db') {
+                        loadTrustedList();
                     } else if (tabId === 'records') {
                         loadRecordsList();
                     }
@@ -750,6 +814,23 @@
                     addMaliciousHash(hashValue, description);
                 });
             }
+            
+            // 添加信任MCP表单
+            const addTrustedForm = document.getElementById('add-trusted-form');
+            if (addTrustedForm) {
+                addTrustedForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const hashValue = document.getElementById('trusted-hash').value.trim();
+                    const description = document.getElementById('trusted-description').value.trim();
+                    
+                    if (!hashValue) {
+                        showNotification('请输入Hash值', 'error');
+                        return;
+                    }
+                    
+                    addTrustedHash(hashValue, description);
+                });
+            }
         }
 
         // 绑定搜索事件
@@ -761,6 +842,16 @@
                     currentSearch.virus = this.value.trim();
                     currentPage.virus = 0;
                     loadVirusList();
+                }, 300));
+            }
+            
+            // 信任MCP搜索
+            const trustedSearch = document.getElementById('trusted-search');
+            if (trustedSearch) {
+                trustedSearch.addEventListener('input', debounce(function() {
+                    currentSearch.trusted = this.value.trim();
+                    currentPage.trusted = 0;
+                    loadTrustedList();
                 }, 300));
             }
             
@@ -790,6 +881,19 @@
                 loadVirusList();
             });
             
+            // 信任MCP分页
+            document.getElementById('prev-trusted').addEventListener('click', function() {
+                if (currentPage.trusted > 0) {
+                    currentPage.trusted--;
+                    loadTrustedList();
+                }
+            });
+            
+            document.getElementById('next-trusted').addEventListener('click', function() {
+                currentPage.trusted++;
+                loadTrustedList();
+            });
+            
             // 检测记录分页
             document.getElementById('prev-records').addEventListener('click', function() {
                 if (currentPage.records > 0) {
@@ -809,6 +913,10 @@
             document.getElementById('refresh-virus').addEventListener('click', function() {
                 loadVirusList();
                 loadStats();
+            });
+            
+            document.getElementById('refresh-trusted').addEventListener('click', function() {
+                loadTrustedList();
             });
         }
 
@@ -849,6 +957,129 @@
                 document.getElementById('virus-db-version').textContent = data.virus_db_version || '-';
             } catch (error) {
                 console.error('加载统计信息失败:', error);
+            }
+        }
+        
+        // 加载信任MCP列表
+        async function loadTrustedList() {
+            try {
+                const searchTerm = currentSearch.trusted;
+                const page = currentPage.trusted + 1; // 后端API从1开始计数
+                const response = await fetch(`${API_BASE}/trusted-hashes?page=${page}&page_size=20&search=${encodeURIComponent(searchTerm)}`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('trusted-list');
+                const pageInfo = document.getElementById('trusted-page-info');
+                
+                if (data.trusted && data.trusted.length > 0) {
+                    tbody.innerHTML = data.trusted.map(item => {
+                        // 修复时间格式解析问题
+                        let formattedTime = '-';
+                        if (item.added_at) {
+                            // 将 "YYYY-MM-DD HH:MM:SS" 格式转换为JavaScript可解析的格式
+                            const timeStr = item.added_at.replace(' ', 'T');
+                            const dateObj = new Date(timeStr);
+                            if (!isNaN(dateObj.getTime())) {
+                                // 转换为东八区时间显示
+                                formattedTime = dateObj.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            }
+                        }
+                        
+                        return `
+                            <tr>
+                                <td>${item.hash}</td>
+                                <td>${item.description || '-'}</td>
+                                <td>${formattedTime}</td>
+                                <td>
+                                    <button class="btn btn-danger btn-sm" onclick="removeTrustedHash('${item.hash}')">删除</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">暂无信任MCP哈希</td></tr>';
+                }
+                
+                // 更新分页信息
+                pageInfo.textContent = `第 ${page + 1} 页`;
+                
+                // 禁用/启用上一页按钮
+                document.getElementById('prev-trusted').disabled = page === 0;
+                
+                // 禁用/启用下一页按钮 (如果当前页面项目少于每页数量，说明是最后一页)
+                document.getElementById('next-trusted').disabled = data.trusted && data.trusted.length < data.page_size;
+                
+            } catch (error) {
+                console.error('加载信任MCP列表失败:', error);
+                document.getElementById('trusted-list').innerHTML = '<tr><td colspan="4" class="text-center">加载失败</td></tr>';
+            }
+        }
+        
+        // 添加信任MCP哈希
+        async function addTrustedHash(hash, description) {
+            try {
+                const response = await fetch(`${API_BASE}/trusted-hashes`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ hash, description })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showNotification('添加信任MCP哈希成功', 'success');
+                    // 重新加载列表
+                    loadTrustedList();
+                    // 清空表单
+                    document.getElementById('trusted-hash').value = '';
+                    document.getElementById('trusted-description').value = '';
+                } else {
+                    showNotification(`添加失败: ${data.error || '未知错误'}`, 'error');
+                }
+            } catch (error) {
+                console.error('添加信任MCP哈希失败:', error);
+                showNotification('添加信任MCP哈希失败', 'error');
+            }
+        }
+        
+        // 移除信任MCP哈希
+        async function removeTrustedHash(hash) {
+            if (!confirm(`确定要移除信任MCP哈希 ${hash} 吗？`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/trusted-hashes/${hash}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showNotification('移除信任MCP哈希成功', 'success');
+                    // 重新加载列表
+                    loadTrustedList();
+                    // 重新加载检测记录列表，更新信任状态
+                    loadRecordsList();
+                } else {
+                    const data = await response.json();
+                    showNotification(`移除失败: ${data.error || '未知错误'}`, 'error');
+                }
+            } catch (error) {
+                console.error('移除信任MCP哈希失败:', error);
+                showNotification('移除信任MCP哈希失败', 'error');
+            }
+        }
+        
+        // 检查哈希是否被信任
+        async function checkHashTrusted(hash) {
+            try {
+                const response = await fetch(`${API_BASE}/check-trusted/${hash}`);
+                const data = await response.json();
+                return data.is_trusted || false;
+            } catch (error) {
+                console.error('检查哈希信任状态失败:', error);
+                return false;
             }
         }
 
@@ -960,7 +1191,18 @@
                 tbody.innerHTML = '';
                 
                 if (data.records && data.records.length > 0) {
-                    data.records.forEach(record => {
+                    // 获取所有记录的哈希值
+                    const hashes = data.records.map(record => record.hash).filter(hash => hash);
+                    
+                    // 创建一个映射来存储哈希的信任状态
+                    const trustStatusMap = {};
+                    
+                    // 对每个唯一的哈希值检查信任状态
+                    for (const hash of [...new Set(hashes)]) {
+                        trustStatusMap[hash] = await checkHashTrusted(hash);
+                    }
+                    
+                    data.records.forEach(async (record) => {
                         // 处理安全问题显示
                         let securityIssuesHTML = '';
                         let issues = record.security_issues;
@@ -1017,17 +1259,38 @@
                             }
                         }
                         
+                        // 添加信任状态标记
+                        let trustBadge = '';
+                        if (record.hash && trustStatusMap[record.hash]) {
+                            trustBadge = '<span class="badge badge-success">已信任</span>';
+                        }
+                        
+                        // 根据状态设置状态徽章
+                        let statusBadge = '';
+                        if (record.status === 'safe') {
+                            statusBadge = '<span class="badge badge-safe">安全</span>';
+                        } else if (record.status === 'malicious') {
+                            statusBadge = '<span class="badge badge-malicious">恶意</span>';
+                        } else if (record.status === 'trusted') {
+                            statusBadge = '<span class="badge badge-safe">已信任</span>';
+                        }
+                        
                         const row = document.createElement('tr');
                         row.innerHTML = `
                             <td>${record.id}</td>
                             <td>${record.mcp_name}</td>
-                            <td><code>${record.hash.substring(0, 16)}...</code></td>
+                            <td>
+                                <code>${record.hash.substring(0, 16)}...</code>
+                                ${trustBadge}
+                            </td>
                             <td><span class="badge badge-${record.detection_type === 'static' ? 'static' : 'dynamic'}">${record.detection_type}</span></td>
                             <td>${securityIssuesHTML}</td>
                             <td>${formattedTime}</td>
                             <td>
+                                ${statusBadge}
                                 ${sourceCodeHTML}
                                 <button class="btn danger btn-sm" onclick="deleteDetectionRecord(${record.id})">删除</button>
+                                ${!trustStatusMap[record.hash] ? `<button class="btn success btn-sm" onclick="addTrustedHash('${record.hash}', '${record.mcp_name}')">信任</button>` : ''}
                             </td>
                         `;
                         row.setAttribute('data-record', JSON.stringify(record)); // 存储完整记录数据

@@ -10,7 +10,7 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from db.database import (
     is_malicious_hash, add_malicious_hash, record_static_detection,
-    get_detection_record_by_hash
+    get_detection_record_by_hash, is_trusted_hash
 )
 
 # MCP配置文件路径
@@ -118,6 +118,27 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
             "from_cache": True
         }
     
+    # 检查是否在信任列表中
+    if is_trusted_hash(code_hash):
+        # 记录检测结果到数据库（信任的代码）
+        record_static_detection(
+            mcp_name=mcp_name,
+            code_hash=code_hash,
+            description=description,
+            security_issues=[],
+            config=config
+        )
+        
+        return {
+            "mcp_name": mcp_name,
+            "status": "safe",  # 信任的MCP被视为安全
+            "hash": code_hash,
+            "message": "该MCP代码已被标记为信任，是安全的",
+            "security_issues_count": 0,
+            "security_issues": [],
+            "from_cache": False
+        }
+    
     # 检查是否在病毒库中
     if is_malicious_hash(code_hash):
         # 记录检测结果到数据库
@@ -133,7 +154,10 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
             "mcp_name": mcp_name,
             "status": "malicious",
             "hash": code_hash,
-            "message": "该MCP代码被标记为恶意代码"
+            "message": "该MCP代码被标记为恶意代码",
+            "security_issues_count": 1,
+            "security_issues": ["发现恶意代码签名"],
+            "from_cache": False
         }
     
     # 实现具体的静态检测逻辑
@@ -164,6 +188,10 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
     # 如果发现安全问题，添加到病毒库
     if security_issues:
         add_malicious_hash(code_hash, f"发现{len(security_issues)}个潜在安全问题")
+        status = "malicious"
+    else:
+        # 没有安全问题的MCP被视为安全
+        status = "safe"
     
     # 记录检测结果到数据库
     record_static_detection(
@@ -175,7 +203,7 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
     )
     
     return {
-        "status": "checked",
+        "status": status,  # 根据是否有安全问题设置状态
         "mcp_name": mcp_name,
         "hash": code_hash,
         "security_issues_count": len(security_issues),

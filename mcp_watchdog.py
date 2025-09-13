@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 sys.path.append(str(pathlib.Path(__file__).parent))
 
 # 导入数据库初始化功能
-from src.db.database import init_database
+from src.db.database import init_database, is_trusted_hash
 
 # 从check_core导入检测功能
 from src.check_core.static_checker import scan_all_local_mcps
@@ -53,6 +53,16 @@ async def mcp_static_checker():
 
     # 执行全量静态安全扫描
     scan_results = scan_all_local_mcps()
+
+    # 为每个扫描结果添加'safe'字段
+    # 如果安全问题数量为0或者MCP被信任，则标记为安全
+    for result in scan_results:
+        # 检查MCP是否被信任
+        is_trusted = is_trusted_hash(result.get("hash", ""))
+        
+        # 检查MCP是否安全：安全问题数量为0或者MCP被信任
+        is_safe = result.get("security_issues_count", 0) == 0 or is_trusted
+        result["safe"] = is_safe
 
     return scan_results
 

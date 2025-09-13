@@ -45,6 +45,16 @@ def init_database():
         )
     ''')
     
+    # 创建信任MCP哈希表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS trusted_hashes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hash TEXT UNIQUE NOT NULL,
+            description TEXT,
+            added_at TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -309,12 +319,21 @@ def get_stats():
         cursor.execute("SELECT COUNT(*) FROM detection_records")
         record_count = cursor.fetchone()[0]
         
-        # 获取恶意文件数量
-        cursor.execute("SELECT COUNT(*) FROM detection_records WHERE hash IN (SELECT hash FROM virus_signatures)")
+        # 获取恶意文件数量（不包括被信任的文件）
+        cursor.execute("""
+            SELECT COUNT(*) FROM detection_records 
+            WHERE hash IN (SELECT hash FROM virus_signatures)
+            AND hash NOT IN (SELECT hash FROM trusted_hashes)
+        """)
         malicious_count = cursor.fetchone()[0]
         
-        # 获取安全文件数量
-        safe_count = record_count - malicious_count
+        # 获取安全文件数量（包括被信任的文件和非恶意文件）
+        cursor.execute("""
+            SELECT COUNT(*) FROM detection_records 
+            WHERE hash NOT IN (SELECT hash FROM virus_signatures)
+            OR hash IN (SELECT hash FROM trusted_hashes)
+        """)
+        safe_count = cursor.fetchone()[0]
         
         # 获取最近的检测记录
         cursor.execute('''
@@ -341,11 +360,16 @@ def get_stats():
         cursor.execute("SELECT MAX(added_at) FROM virus_signatures")
         virus_db_version = cursor.fetchone()[0] or "-"
         
+        # 获取信任哈希数量
+        cursor.execute("SELECT COUNT(*) FROM trusted_hashes")
+        trusted_count = cursor.fetchone()[0]
+        
         return {
             "virus_signatures_count": virus_count,
             "detection_records_count": record_count,
             "malicious_count": malicious_count,
             "safe_count": safe_count,
+            "trusted_count": trusted_count,
             "total_detections": record_count,
             "virus_db_version": virus_db_version,
             "recent_records": recent_records
@@ -353,5 +377,67 @@ def get_stats():
     except sqlite3.Error as e:
         print(f"查询时出错: {e}")
         return {}
+    finally:
+        conn.close()
+
+# 检查hash是否在信任列表中
+def is_trusted_hash(code_hash: str) -> bool:
+    """检查给定的hash是否在信任列表中"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT COUNT(*) FROM trusted_hashes WHERE hash = ?", (code_hash,))
+    count = cursor.fetchone()[0]
+    
+    conn.close()
+    return count > 0
+
+# 添加信任hash
+def add_trusted_hash(code_hash: str, description: str = ""):
+    """添加信任hash"""
+    
+    # 获取东八区当前时间
+    current_time = get_utc8_time()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "INSERT OR IGNORE INTO trusted_hashes (hash, description, added_at) VALUES (?, ?, ?)",
+            (code_hash, description, current_time)
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"添加信任hash时出错: {e}")
+    finally:
+        conn.close()
+
+# 获取所有信任hash
+def get_trusted_hashes() -> list:
+    """获取所有信任hash"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT hash, description, added_at FROM trusted_hashes")
+    results = cursor.fetchall()
+    
+    conn.close()
+    return [{"hash": row[0], "description": row[1], "added_at": row[2]} for row in results]
+
+# 删除信任hash
+def remove_trusted_hash(hash_value: str) -> bool:
+    """从信任列表中移除hash"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("DELETE FROM trusted_hashes WHERE hash = ?", (hash_value,))
+        conn.commit()
+        deleted_count = cursor.rowcount
+        return deleted_count > 0
+    except sqlite3.Error as e:
+        print(f"删除时出错: {e}")
+        return False
     finally:
         conn.close()
