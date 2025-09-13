@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCP Checker 管理界面</title>
+    <title>MCP WatchDog 管理界面</title>
     <style>
         :root {
             --primary-color: #4285f4;
@@ -187,6 +187,18 @@
             background-color: #f8f9fa;
         }
         
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        
+        code {
+            font-family: 'Courier New', monospace;
+            background-color: #f1f3f4;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        
         .badge {
             display: inline-block;
             padding: 4px 10px;
@@ -207,12 +219,151 @@
         
         .actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 0.85rem;
+        }
+        
+        .btn-outline-secondary {
+            background-color: transparent;
+            color: #6c757d;
+            border: 1px solid #6c757d;
+        }
+        
+        .btn-outline-secondary:hover {
+            background-color: #6c757d;
+            color: white;
         }
         
         .btn-small {
             padding: 6px 12px;
             font-size: 0.85rem;
+        }
+        
+        .security-issues-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .issue-count {
+            font-weight: 500;
+            color: var(--danger-color);
+        }
+        
+        .no-issues {
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .table-responsive {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .table-responsive {
+                font-size: 0.9rem;
+            }
+            
+            th, td {
+                padding: 10px 8px;
+            }
+        }
+        
+        /* 模态框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-container {
+            background: white;
+            border-radius: 8px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+        
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-title {
+            margin: 0;
+            font-size: 1.25rem;
+            color: var(--dark-color);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            transition: color 0.2s;
+        }
+        
+        .modal-close:hover {
+            color: #333;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            overflow: auto;
+            max-height: 60vh;
+        }
+        
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #ddd;
+            text-align: right;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @media (max-width: 768px) {
+            .modal-container {
+                max-width: 95%;
+                max-height: 95%;
+            }
+            
+            .modal-header, .modal-footer {
+                padding: 12px 15px;
+            }
+            
+            .modal-title {
+                font-size: 1.1rem;
+            }
         }
         
         .stats-grid {
@@ -223,30 +374,29 @@
         }
         
         .stat-card {
-            background-color: var(--light-color);
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 24px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
             text-align: center;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         }
         
         .stat-number {
             font-size: 2.5rem;
             font-weight: 700;
             margin: 10px 0;
+            color: var(--primary-color);
         }
         
         .stat-label {
             color: var(--gray-color);
-            font-size: 1rem;
-        }
-        
-        .stat-primary .stat-number {
-            color: var(--primary-color);
-        }
-        
-        .stat-danger .stat-number {
-            color: var(--danger-color);
+            font-size: 0.9rem;
         }
         
         .notification {
@@ -268,23 +418,83 @@
             border: 1px solid var(--danger-color);
         }
         
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(66, 133, 244, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            display: inline-flex;
+            align-items: center;
+        }
+        
         .pagination {
             display: flex;
             justify-content: center;
             margin-top: 20px;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         .pagination button {
             padding: 8px 16px;
+            background-color: #f1f3f4;
+            color: var(--dark-color);
+            border: 1px solid var(--border-color);
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background-color: #e8eaed;
+        }
+        
+        .pagination button:disabled {
+            background-color: #f8f9fa;
+            color: #9aa0a6;
+            cursor: not-allowed;
+        }
+        
+        .pagination span {
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            color: var(--dark-color);
         }
         
         .search-box {
             margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
         
         .search-box input {
             max-width: 300px;
+            padding-left: 30px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%235f6368' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 10px center;
+        }
+        
+        @media (max-width: 768px) {
+            .search-box {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-box input {
+                max-width: none;
+            }
         }
         
         @media (max-width: 768px) {
@@ -310,7 +520,7 @@
 <body>
     <header>
         <div class="container">
-            <h1>MCP Checker 管理界面</h1>
+            <h1>MCP WatchDog 管理界面</h1>
             <p class="subtitle">病毒库管理和检测记录管理</p>
         </div>
     </header>
@@ -318,15 +528,27 @@
     <div class="container">
         <!-- 统计信息 -->
         <div class="stats-grid">
-            <div class="stat-card stat-primary">
-                <div class="stat-number" id="virus-count">0</div>
-                <div class="stat-label">病毒库记录</div>
-            </div>
-            <div class="stat-card stat-danger">
-                <div class="stat-number" id="record-count">0</div>
-                <div class="stat-label">检测记录</div>
-            </div>
-        </div>
+                        <div class="stat-card">
+                            <h3>总检测数</h3>
+                            <div class="stat-number" id="total-detections">0</div>
+                            <div class="stat-label">系统累计检测的文件总数</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>恶意文件数</h3>
+                            <div class="stat-number" style="color: var(--danger-color);" id="malicious-count">0</div>
+                            <div class="stat-label">检测到的恶意文件数量</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>安全文件数</h3>
+                            <div class="stat-number" style="color: var(--success-color);" id="safe-count">0</div>
+                            <div class="stat-label">检测结果为安全的文件数量</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>病毒库版本</h3>
+                            <div class="stat-number" style="    font-size: 1.5rem;margin: 25px 0px;" id="virus-db-version">-</div>
+                            <div class="stat-label">当前病毒库版本信息</div>
+                        </div>
+                    </div>
         
         <!-- 通知消息 -->
         <div id="notification" class="notification"></div>
@@ -416,24 +638,25 @@
                 <div class="search-box">
                     <input type="text" id="record-search" placeholder="搜索MCP名称或Hash...">
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>MCP名称</th>
-                            <th>Hash</th>
-                            <th>类型</th>
-                            <th>安全问题</th>
-                            <th>时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="records-list">
-                        <tr>
-                            <td colspan="7" style="text-align: center;">加载中...</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <!-- 检测记录表格 -->
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>MCP名称</th>
+                                <th>Hash</th>
+                                <th>类型</th>
+                                <th>安全问题</th>
+                                <th>时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-table-body">
+                            <!-- 数据将通过JavaScript动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
                 <div class="pagination">
                     <button id="prev-records" disabled>上一页</button>
                     <span id="records-page-info">第 1 页</span>
@@ -473,7 +696,7 @@
             bindRefreshEvents();
             
             // 加载初始数据
-            loadStats();
+            fetchStats();
             loadRecentRecords();
             loadVirusList();
             loadRecordsList();
@@ -498,7 +721,7 @@
                     
                     // 根据标签页加载数据
                     if (tabId === 'dashboard') {
-                        loadStats();
+                        fetchStats();
                         loadRecentRecords();
                     } else if (tabId === 'virus') {
                         loadVirusList();
@@ -614,19 +837,16 @@
             }, 3000);
         }
 
-        // 加载统计信息
-        async function loadStats() {
+        // 获取统计信息
+        async function fetchStats() {
             try {
                 const response = await fetch(`${API_BASE}/stats`);
                 const data = await response.json();
                 
-                if (data.virus_signatures_count !== undefined) {
-                    document.getElementById('virus-count').textContent = data.virus_signatures_count;
-                }
-                
-                if (data.detection_records_count !== undefined) {
-                    document.getElementById('record-count').textContent = data.detection_records_count;
-                }
+                document.getElementById('total-detections').textContent = data.total_detections || 0;
+                document.getElementById('malicious-count').textContent = data.malicious_count || 0;
+                document.getElementById('safe-count').textContent = data.safe_count || 0;
+                document.getElementById('virus-db-version').textContent = data.virus_db_version || '-';
             } catch (error) {
                 console.error('加载统计信息失败:', error);
             }
@@ -640,15 +860,31 @@
                 
                 const tbody = document.getElementById('recent-records');
                 if (data.recent_records && data.recent_records.length > 0) {
-                    tbody.innerHTML = data.recent_records.map(record => `
+                    tbody.innerHTML = data.recent_records.map(record => {
+                        // 修复时间格式解析问题
+                        let formattedTime = '-';
+                        if (record.detected_at) {
+                            // 将 "YYYY-MM-DD HH:MM:SS" 格式转换为JavaScript可解析的格式
+                            const timeStr = record.detected_at.replace(' ', 'T');
+                            const dateObj = new Date(timeStr);
+                            if (!isNaN(dateObj.getTime())) {
+                                // 转换为东八区时间显示
+                                formattedTime = dateObj.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            } else {
+                                // 如果解析失败，直接显示原始时间字符串
+                                formattedTime = record.detected_at;
+                            }
+                        }
+                        
+                        return `
                         <tr>
                             <td>${record.id}</td>
                             <td>${record.mcp_name}</td>
                             <td><span class="badge badge-${record.detection_type === 'static' ? 'static' : 'dynamic'}">${record.detection_type}</span></td>
                             <td>${record.security_issues_count}</td>
-                            <td>${new Date(record.detected_at).toLocaleString()}</td>
+                            <td>${formattedTime}</td>
                         </tr>
-                    `).join('');
+                    `}).join('');
                 } else {
                     tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">暂无数据</td></tr>';
                 }
@@ -668,16 +904,32 @@
                 
                 const tbody = document.getElementById('virus-list');
                 if (data.hashes && data.hashes.length > 0) {
-                    tbody.innerHTML = data.hashes.map(hash => `
+                    tbody.innerHTML = data.hashes.map(hash => {
+                        // 修复时间格式解析问题
+                        let formattedTime = '-';
+                        if (hash.added_at) {
+                            // 将 "YYYY-MM-DD HH:MM:SS" 格式转换为JavaScript可解析的格式
+                            const timeStr = hash.added_at.replace(' ', 'T');
+                            const dateObj = new Date(timeStr);
+                            if (!isNaN(dateObj.getTime())) {
+                                // 转换为东八区时间显示
+                                formattedTime = dateObj.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            } else {
+                                // 如果解析失败，直接显示原始时间字符串
+                                formattedTime = hash.added_at;
+                            }
+                        }
+                        
+                        return `
                         <tr>
                             <td><code>${hash.hash.substring(0, 16)}...</code></td>
                             <td>${hash.description || '-'}</td>
-                            <td>${new Date(hash.added_at).toLocaleString()}</td>
+                            <td>${formattedTime}</td>
                             <td class="actions">
                                 <button class="btn-small danger" onclick="removeMaliciousHash('${hash.hash}')">删除</button>
                             </td>
                         </tr>
-                    `).join('');
+                    `}).join('');
                 } else {
                     tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">暂无数据</td></tr>';
                 }
@@ -694,29 +946,91 @@
 
         // 加载检测记录列表
         async function loadRecordsList() {
+            const tbody = document.getElementById('records-table-body');
+            // 显示加载动画
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;"><div class="loading-text"><span class="loading"></span>加载中...</div></td></tr>';
+            
             try {
                 const limit = 20;
                 const offset = currentPage.records * limit;
                 const response = await fetch(`${API_BASE}/detection-records?skip=${offset}&limit=${limit}`);
                 const data = await response.json();
                 
-                const tbody = document.getElementById('records-list');
+                tbody.innerHTML = '';
+                
                 if (data.records && data.records.length > 0) {
-                    tbody.innerHTML = data.records.map(record => `
-                        <tr>
+                    data.records.forEach(record => {
+                        // 处理安全问题显示
+                        let securityIssuesHTML = '';
+                        if (record.security_issues && record.security_issues.length > 0) {
+                            // 检查安全问题的类型并正确显示
+                            let issueCount = 0;
+                            if (Array.isArray(record.security_issues)) {
+                                issueCount = record.security_issues.length;
+                            } else if (typeof record.security_issues === 'string') {
+                                // 如果是字符串，尝试解析为数组
+                                try {
+                                    const parsed = JSON.parse(record.security_issues);
+                                    issueCount = Array.isArray(parsed) ? parsed.length : 1;
+                                } catch (e) {
+                                    issueCount = 1;
+                                }
+                            }
+                            
+                            securityIssuesHTML = `
+                                <div class="security-issues-cell">
+                                    <button class="btn danger btn-sm" onclick="showSecurityIssues(${record.id})">${issueCount} 个问题</button>
+                                </div>
+                            `;
+                        } else {
+                            securityIssuesHTML = '<span class="no-issues">无问题</span>';
+                        }
+                        
+                        // 处理源代码显示
+                        let sourceCodeHTML = '';
+                        if (record.source_code || (record.config && record.config.args)) {
+                            if (record.source_code) {
+                                sourceCodeHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="showSourceCode(${record.id})">查看源码</button>`;
+                            } else if (record.config && record.config.args) {
+                                sourceCodeHTML = `<button class="btn btn-sm btn-outline-secondary" onclick="showSourceCode(${record.id})">文件路径</button>`;
+                            }
+                        }
+                        
+                        // 修复时间格式解析问题
+                        let formattedTime = '-';
+                        if (record.detected_at) {
+                            // 将 "YYYY-MM-DD HH:MM:SS" 格式转换为JavaScript可解析的格式
+                            const timeStr = record.detected_at.replace(' ', 'T');
+                            const dateObj = new Date(timeStr);
+                            if (!isNaN(dateObj.getTime())) {
+                                // 转换为东八区时间显示
+                                formattedTime = dateObj.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                            } else {
+                                // 如果解析失败，直接显示原始时间字符串
+                                formattedTime = record.detected_at;
+                            }
+                        }
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
                             <td>${record.id}</td>
                             <td>${record.mcp_name}</td>
                             <td><code>${record.hash.substring(0, 16)}...</code></td>
                             <td><span class="badge badge-${record.detection_type === 'static' ? 'static' : 'dynamic'}">${record.detection_type}</span></td>
-                            <td>${record.security_issues.length}</td>
-                            <td>${new Date(record.detected_at).toLocaleString()}</td>
-                            <td class="actions">
-                                <button class="btn-small danger" onclick="deleteDetectionRecord(${record.id})">删除</button>
+                            <td>${securityIssuesHTML}</td>
+                            <td>${formattedTime}</td>
+                            <td>
+                                ${sourceCodeHTML}
+                                <button class="btn danger btn-sm" onclick="deleteDetectionRecord(${record.id})">删除</button>
                             </td>
-                        </tr>
-                    `).join('');
+                        `;
+                        row.setAttribute('data-record', JSON.stringify(record)); // 存储完整记录数据
+                        tbody.appendChild(row);
+                    });
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">暂无数据</td></tr>';
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="7" style="text-align: center;">暂无检测记录</td>';
+                    tbody.appendChild(row);
                 }
                 
                 // 更新分页信息
@@ -724,9 +1038,154 @@
                 document.getElementById('prev-records').disabled = currentPage.records === 0;
                 document.getElementById('next-records').disabled = !data.records || data.records.length < limit;
             } catch (error) {
-                console.error('加载检测记录列表失败:', error);
-                document.getElementById('records-list').innerHTML = '<tr><td colspan="7" style="text-align: center;">加载失败</td></tr>';
+                console.error('加载检测记录失败:', error);
+                document.getElementById('records-table-body').innerHTML = '<tr><td colspan="7" style="text-align: center; color: red;">加载失败</td></tr>';
             }
+        }
+        
+        // 显示安全问题详情
+        function showSecurityIssues(recordId) {
+            // 找到对应的记录
+            const row = Array.from(document.querySelectorAll('#records-table-body tr')).find(r => {
+                const record = JSON.parse(r.getAttribute('data-record'));
+                return record.id === recordId;
+            });
+            
+            if (row) {
+                const record = JSON.parse(row.getAttribute('data-record'));
+                if (record.security_issues && record.security_issues.length > 0) {
+                    let issuesHTML = '<div style="text-align: left;">';
+                    record.security_issues.forEach((issue, index) => {
+                        // 检查issue是字符串还是对象
+                        let issueType, issueDescription, issueLineNumber, issueCodeSnippet;
+                        if (typeof issue === 'string') {
+                            // 如果是字符串，直接显示
+                            issueType = '未知';
+                            issueDescription = issue;
+                            issueLineNumber = null;
+                            issueCodeSnippet = null;
+                        } else {
+                            // 如果是对象，按对象处理
+                            issueType = issue.type || '未知';
+                            issueDescription = issue.description || issue;
+                            issueLineNumber = issue.line_number || null;
+                            issueCodeSnippet = issue.code_snippet || null;
+                        }
+                        
+                        issuesHTML += `
+                            <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                ${issueLineNumber ? `<strong>行号:</strong> ${issueLineNumber}<br>` : ''}
+                                ${issueCodeSnippet ? `<strong>代码片段:</strong><pre style="background: #f5f5f5; padding: 5px; margin: 5px 0;">${escapeHtml(issueCodeSnippet)}</pre>` : ''}
+                            </div>
+                        `;
+                    });
+                    issuesHTML += '</div>';
+                    
+                    // 使用模态框显示安全问题详情
+                    showDetailModal(`安全问题详情 - ${record.mcp_name}`, issuesHTML);
+                }
+            } else {
+                console.error('未找到记录ID为 ' + recordId + ' 的记录');
+            }
+        }
+        
+        // 显示源代码
+        function showSourceCode(recordId) {
+            // 找到对应的记录
+            const row = Array.from(document.querySelectorAll('#records-table-body tr')).find(r => {
+                const record = JSON.parse(r.getAttribute('data-record'));
+                return record.id === recordId;
+            });
+            
+            if (row) {
+                const record = JSON.parse(row.getAttribute('data-record'));
+                if (record.source_code || (record.config && record.config.args)) {
+                    let content = '';
+                    if (record.source_code) {
+                        content = `<pre style="text-align: left; background: #f5f5f5; padding: 10px; max-height: 500px; overflow: auto;">${escapeHtml(record.source_code)}</pre>`;
+                    } else if (record.config && record.config.args) {
+                        // 从config.args中获取源代码路径
+                        const sourcePath = record.config.args[record.config.args.length - 1]; // 假设最后一个参数是文件路径
+                        content = `<p>源代码文件路径: ${sourcePath}</p>`;
+                    }
+                    // 使用模态框显示源代码
+                    showDetailModal(`源代码 - ${record.mcp_name}`, content);
+                }
+            } else {
+                console.error('未找到记录ID为 ' + recordId + ' 的记录');
+            }
+        }
+        
+        // 显示执行参数
+        function showExecutionArgs(recordId) {
+            // 找到对应的记录
+            const row = Array.from(document.querySelectorAll('#records-table-body tr')).find(r => {
+                const record = JSON.parse(r.getAttribute('data-record'));
+                return record.id === recordId;
+            });
+            
+            if (row) {
+                const record = JSON.parse(row.getAttribute('data-record'));
+                if (record.config && record.config.args) {
+                    // 使用模态框显示执行参数
+                    showDetailModal(`执行参数 - ${record.mcp_name}`, `<pre style="text-align: left; background: #f5f5f5; padding: 10px;">${escapeHtml(JSON.stringify(record.config.args, null, 2))}</pre>`);
+                }
+            } else {
+                console.error('未找到记录ID为 ' + recordId + ' 的记录');
+            }
+        }
+        
+        // 显示详情模态框
+        function showDetailModal(title, content) {
+            // 创建模态框元素
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal-container">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${title}</h5>
+                        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        ${content}
+                    </div>
+                    <div class="modal-footer">
+                        <button onclick="this.closest('.modal-overlay').remove()" class="btn btn-secondary">关闭</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // 点击模态框外部关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+            
+            // ESC键关闭模态框
+            document.addEventListener('keydown', function closeOnEscape(e) {
+                if (e.key === 'Escape') {
+                    modal.remove();
+                    document.removeEventListener('keydown', closeOnEscape);
+                }
+            });
+        }
+        
+        // 转义HTML特殊字符
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            
+            return text.toString().replace(/[&<>"']/g, function(m) {
+                return map[m];
+            });
         }
 
         // 添加恶意Hash

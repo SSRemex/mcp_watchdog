@@ -115,6 +115,24 @@ async def api_detection_records(
     end = start + page_size
     records = all_records[start:end]
     
+    # 为每条记录添加源代码信息（如果有的话）
+    for record in records:
+        # 如果是静态检测且有配置信息，尝试获取源代码路径
+        if record['detection_type'] == 'static' and record['config']:
+            args = record['config'].get('args', [])
+            for arg in args:
+                if isinstance(arg, str) and arg.endswith('.py'):
+                    # 尝试读取源代码文件
+                    try:
+                        with open(arg, 'r', encoding='utf-8') as f:
+                            record['source_code'] = f.read()
+                        break
+                    except:
+                        record['source_code'] = None
+        # 如果是动态检测且有参数信息，添加参数信息
+        elif record['detection_type'] == 'dynamic' and record['args']:
+            record['execution_args'] = record['args']
+    
     return {
         "records": records,
         "total": total,

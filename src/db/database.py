@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import datetime
 import hashlib
 from typing import Optional, Dict, Any, List
 import os
@@ -24,7 +25,7 @@ def init_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             hash TEXT UNIQUE NOT NULL,
             description TEXT,
-            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            added_at TIMESTAMP
         )
     ''')
     
@@ -40,7 +41,7 @@ def init_database():
             args TEXT,
             result TEXT,
             detection_type TEXT,  -- 'static' or 'dynamic'
-            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            detected_at TIMESTAMP
         )
     ''')
     
@@ -62,13 +63,18 @@ def is_malicious_hash(code_hash: str) -> bool:
 # 添加恶意hash到病毒库
 def add_malicious_hash(code_hash: str, description: str = ""):
     """添加恶意hash到病毒库"""
+    
+    # 在程序中生成当前时间戳
+    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
+    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
         cursor.execute(
-            "INSERT OR IGNORE INTO virus_signatures (hash, description) VALUES (?, ?)",
-            (code_hash, description)
+            "INSERT OR IGNORE INTO virus_signatures (hash, description, added_at) VALUES (?, ?, ?)",
+            (code_hash, description, current_time)
         )
         conn.commit()
     except sqlite3.Error as e:
@@ -124,21 +130,27 @@ def get_detection_records(limit: int = 100) -> list:
 # 记录静态检测结果
 def record_static_detection(mcp_name: str, code_hash: str, description: str, security_issues: List[str], config: Optional[Dict[str, Any]] = None):
     """记录静态检测结果"""
+    
+    # 在程序中生成当前时间戳
+    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
+    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
         cursor.execute('''
             INSERT INTO detection_records 
-            (mcp_name, hash, description, security_issues, config, detection_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (mcp_name, hash, description, security_issues, config, detection_type, detected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             mcp_name, 
             code_hash, 
             description, 
             json.dumps(security_issues), 
             json.dumps(config) if config else None,
-            "static"
+            "static",
+            current_time
         ))
         conn.commit()
     except sqlite3.Error as e:
@@ -151,14 +163,19 @@ def record_dynamic_detection(mcp_name: str, code_hash: str, description: str, se
                            config: Optional[Dict[str, Any]] = None, args: Optional[Dict[str, Any]] = None, 
                            result: Optional[Any] = None):
     """记录动态检测结果"""
+
+    # 在程序中生成当前时间戳
+    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
+    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
         cursor.execute('''
             INSERT INTO detection_records 
-            (mcp_name, hash, description, security_issues, config, args, result, detection_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (mcp_name, hash, description, security_issues, config, args, result, detection_type, detected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             mcp_name, 
             code_hash, 
@@ -167,7 +184,8 @@ def record_dynamic_detection(mcp_name: str, code_hash: str, description: str, se
             json.dumps(config) if config else None,
             json.dumps(args) if args else None,
             json.dumps(result) if result else None,
-            "dynamic"
+            "dynamic",
+            current_time
         ))
         conn.commit()
     except sqlite3.Error as e:
@@ -224,6 +242,13 @@ def get_stats():
         cursor.execute("SELECT COUNT(*) FROM detection_records")
         record_count = cursor.fetchone()[0]
         
+        # 获取恶意文件数量
+        cursor.execute("SELECT COUNT(*) FROM detection_records WHERE hash IN (SELECT hash FROM virus_signatures)")
+        malicious_count = cursor.fetchone()[0]
+        
+        # 获取安全文件数量
+        safe_count = record_count - malicious_count
+        
         # 获取最近的检测记录
         cursor.execute('''
             SELECT id, mcp_name, hash, description, security_issues, detection_type, detected_at
@@ -245,9 +270,17 @@ def get_stats():
             for row in recent_rows
         ]
         
+        # 获取病毒库版本（最新添加的记录时间）
+        cursor.execute("SELECT MAX(added_at) FROM virus_signatures")
+        virus_db_version = cursor.fetchone()[0] or "-"
+        
         return {
             "virus_signatures_count": virus_count,
             "detection_records_count": record_count,
+            "malicious_count": malicious_count,
+            "safe_count": safe_count,
+            "total_detections": record_count,
+            "virus_db_version": virus_db_version,
             "recent_records": recent_records
         }
     except sqlite3.Error as e:

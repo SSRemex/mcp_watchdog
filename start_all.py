@@ -17,7 +17,7 @@ def main():
     
     print(f"Web管理界面已启动 (PID: {web_process.pid})")
     print("请在浏览器中打开以下地址访问管理界面:")
-    print("http://localhost:8000/web_admin.html")
+    print("http://localhost:8000/")
     print("\n按 Ctrl+C 停止所有服务")
     
     try:

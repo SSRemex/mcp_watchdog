@@ -18,7 +18,7 @@ from db.database import (
 )
 
 # 数据库文件路径
-DB_FILE = "mcp_checker.db"
+DB_FILE = os.path.join(os.path.dirname(__file__), "..", "db", "mcp_checker.db")
 
 app = FastAPI(title="MCP Checker Web Management")
 
@@ -112,19 +112,16 @@ async def get_stats_api():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询时出错: {e}")
 
-@app.get("/")
-async def root():
-    return {"message": "MCP Checker Web Management API"}
 
-@app.get("/web_admin.html", response_class=FileResponse)
+@app.get("/", response_class=FileResponse)
 async def web_admin():
-    # 获取当前目录下的web_admin.html文件
+    # web.html文件
     current_dir = pathlib.Path(__file__).parent
-    web_admin_path = current_dir / "web_admin.html"
+    web_admin_path = current_dir / "web.html"
     if web_admin_path.exists():
         return FileResponse(str(web_admin_path))
     else:
-        raise HTTPException(status_code=404, detail="web_admin.html file not found")
+        raise HTTPException(status_code=404, detail="web.html file not found")
 
 if __name__ == "__main__":
     import uvicorn
