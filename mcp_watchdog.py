@@ -35,4 +35,9 @@ async def mcp_static_checker():
 
 if __name__ == "__main__":
     # 运行MCP服务器
-    mcp.run()
+    if not os.path.exists("./src/db/mcp_checker.db"):
+        init_database()
+
+    list = scan_all_local_mcps()
+    print(list)
+    
