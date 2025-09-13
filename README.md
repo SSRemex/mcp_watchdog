@@ -1,58 +1,113 @@
-MCP Checker
-工具描述：
-实现一个python mcp工具，用于检测MCP静态&动态场景下的安全性
-功能：
-1. 静态检测：在进行对话前，对所有的MCP代码进行读取分析，检测潜在的安全问题，记录hash值并打标（静态场景），已打标的代码不再进行检测，并返回检测报告
-2. 动态检测：在大模型调用其他MCP时，调用该MCP并记录调用信息，对该MCP的传入参数、代码信息、配置信息、返回结果进行分析，对异常行为进行提醒，记录hash值并打标（动态场景），已打标的MCP不再进行分析
-3. 要有病毒库管理，记录恶意hash值，用于静态检测（WEB管理，操作同一个数据库）
-4. 检测记录管理，记录所有检测信息（WEB管理，操作同一个数据库）
+# MCP Watchdog
 
-使用方法：
-1. 运行MCP服务器：`python mcp_checker.py`
-2. 该工具会自动拦截所有MCP调用并进行静态检测
-3. 可通过`get_detection_reports`工具获取所有检测报告
-4. 运行Web管理界面：`python app.py`，然后在浏览器中打开 http://localhost:8000/web_admin.html
-5. 或者使用启动脚本同时启动所有服务：`python start_all.py`
+MCP Watchdog 是一个用于监控和检查 MCP (Model Context Protocol) 工具安全性的系统。它提供静态扫描、动态监控和 Web 管理界面，确保 MCP 工具在使用过程中的安全性。
 
-API接口：
-- `pre_call(mcp_name, code, description, config)`: 网关钩子，在实际MCP调用前触发，执行静态检测
-- `static_check(mcp_name, code, description, config)`: 静态检测函数
-- `dynamic_check(mcp_name, code, description, config, args, result)`: 动态检测函数
-- `get_detection_reports()`: 获取所有检测报告
-- `add_malicious_hash_tool(hash_value, description)`: 添加恶意hash到病毒库
-- `remove_malicious_hash(hash_value)`: 从病毒库中移除恶意hash
-- `get_malicious_hashes_tool()`: 获取所有恶意hash
+## 项目结构
 
-Web管理API接口：
-- `POST /api/virus-signatures`: 添加恶意hash到病毒库
-- `DELETE /api/virus-signatures/{hash_value}`: 从病毒库中移除恶意hash
-- `GET /api/virus-signatures`: 获取所有恶意hash
-- `GET /api/detection-records`: 获取检测记录
-- `DELETE /api/detection-records/{record_id}`: 删除检测记录
-- `GET /api/stats`: 获取统计信息
+```
+mcp_watchdog/
+├── src/
+│   ├── check_core/         # 核心检测逻辑
+│   │   ├── detector.py     # 静态和动态检测实现
+│   │   └── mcp_checker.py  # MCP工具定义和注册
+│   ├── db/                 # 数据库操作
+│   │   └── database.py     # 数据库操作实现
+│   └── web/                # Web管理界面
+│       ├── app.py          # Web API接口
+│       └── web_admin.py    # Web管理界面实现
+├── start_all.py            # 启动所有服务
+├── mcp_watchdog.py         # 程序入口文件，创建MCP实例
+├── requirements.txt        # 项目依赖
+├── simple_test.py          # 简单测试脚本
+└── tests/                  # 测试文件目录
+```
 
-检测内容：
-- 静态检测：检查代码中是否包含危险函数调用（如exec, eval等），并与病毒库中的恶意hash进行比对
-- 动态检测：检查参数和返回结果中是否包含敏感信息（如password, token等）
+## 功能特性
 
-数据库说明：
-- 使用SQLite数据库存储病毒库和检测记录
-- 病毒库表(virus_signatures)：存储已知的恶意代码hash值
-- 检测记录表(detection_records)：存储所有检测历史记录
+### 1. 静态扫描
+- 对 MCP 工具进行静态代码分析，从市场导入的默认可信，仅对本地新增的 MCP 工具进行扫描
+- 检查潜在的恶意代码模式
+- 维护恶意代码 hash 库
 
-参考链接：https://github.com/modelcontextprotocol/python-sdk
+### 2. 动态监控
+- 监控 MCP 工具的运行时行为
+- 检查参数和返回值中的敏感信息
+- 记录所有检测结果
 
+### 3. Web 管理界面
+- 提供友好的 Web 界面管理恶意代码库
+- 查看和分析检测记录
+- 实时监控 MCP 工具状态
 
+### 4. 架构优化
+- 入口文件 (`mcp_watchdog.py`) 负责创建MCP实例
+- 核心逻辑 (`mcp_checker.py`) 负责工具定义和注册
+- 检测实现 (`detector.py`) 负责具体的静态和动态检测
+- 数据库操作 (`database.py`) 负责数据持久化
 
----
-MCP WatchDog 是一款专为 Model Context Protocol (MCP) 设计的安全检测工具，旨在帮助开发者和安全研究人员识别和防范潜在的安全威胁。该工具具备以下核心功能：
+## 安装和使用
 
-1. 静态检测 在MCP代码执行前，全面分析代码内容，检测潜在的安全风险，如危险函数调用（exec, eval等），并与内置病毒库中的恶意hash进行比对，确保代码安全。
+### 安装依赖
+```bash
+pip install -r requirements.txt
+```
 
-2. 动态检测 在MCP运行时，实时监控其调用参数、配置信息和返回结果，识别异常行为并及时提醒，有效防范动态攻击。
+### 启动服务
+```bash
+python start_all.py
+```
 
-3. 病毒库管理 提供完善的病毒库管理功能，支持添加、删除和查询恶意hash值，构建个性化的安全防护体系。
+启动后，可以通过以下地址访问 Web 管理界面：
+http://localhost:8000/web_admin.html
 
-4. 检测记录管理 详细记录所有检测历史，便于追溯和分析安全事件，为安全审计提供可靠数据支持。
+### 运行测试
+```bash
+python simple_test.py
+```
 
-MCP Checker 还配备了直观的Web管理界面，用户可以通过浏览器轻松管理病毒库和查看检测记录。同时，它提供了丰富的API接口，方便与其他系统集成。使用MCP Checker，让您的MCP应用更加安全可靠。
+## 数据库结构
+
+### 恶意代码哈希表 (malicious_hashes)
+| 字段名 | 类型 | 描述 |
+|--------|------|------|
+| id | INTEGER | 主键 |
+| hash_value | TEXT | 恶意代码的SHA256哈希值 |
+| description | TEXT | 描述信息 |
+
+### 检测记录表 (detection_records)
+| 字段名 | 类型 | 描述 |
+|--------|------|------|
+| id | INTEGER | 主键 |
+| timestamp | DATETIME | 检测时间 |
+| mcp_name | TEXT | MCP工具名称 |
+| code_hash | TEXT | 代码哈希值 |
+| description | TEXT | 检测描述 |
+| security_issues | TEXT | 安全问题（JSON格式） |
+| config | TEXT | MCP配置（JSON格式） |
+
+## API 接口
+
+### 病毒库管理
+- `GET /api/malicious-hashes` - 获取所有恶意代码哈希
+- `POST /api/malicious-hashes` - 添加恶意代码哈希
+- `DELETE /api/malicious-hashes/{hash_value}` - 删除恶意代码哈希
+
+### 检测记录管理
+- `GET /api/detection-records` - 获取所有检测记录
+- `DELETE /api/detection-records/{id}` - 删除检测记录
+
+### 统计信息
+- `GET /api/stats` - 获取统计信息
+
+## 安全检查流程
+
+### 市场下载的 MCP
+1. 对 MCP 配置信息计算 hash
+2. 检查 hash 是否在病毒库中
+3. 记录检测结果
+
+### 本地 MCP
+1. 对 MCP 代码文件计算 hash
+2. 检查 hash 是否在病毒库中
+3. 使用大模型对代码进行深度审计（预留功能）
+4. 记录检测结果

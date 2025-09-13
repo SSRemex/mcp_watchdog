@@ -11,16 +11,16 @@ def main():
     
     # 启动MCP服务器
     mcp_process = subprocess.Popen([
-        sys.executable, 
-        os.path.join(current_dir, "mcp_checker.py")
+        "python3", 
+        os.path.join(current_dir, "src", "check_core", "mcp_checker.py")
     ], cwd=current_dir)
     
     print(f"MCP服务器已启动 (PID: {mcp_process.pid})")
     
     # 启动Web管理界面
     web_process = subprocess.Popen([
-        sys.executable, 
-        os.path.join(current_dir, "app.py")
+        "python3", 
+        os.path.join(current_dir, "src", "web", "app.py")
     ], cwd=current_dir)
     
     print(f"Web管理界面已启动 (PID: {web_process.pid})")
