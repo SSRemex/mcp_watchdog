@@ -60,13 +60,18 @@ def is_malicious_hash(code_hash: str) -> bool:
     conn.close()
     return count > 0
 
+# 获取东八区当前时间
+def get_utc8_time():
+    """获取东八区当前时间"""
+    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
+    return datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+
 # 添加恶意hash到病毒库
 def add_malicious_hash(code_hash: str, description: str = ""):
     """添加恶意hash到病毒库"""
     
-    # 在程序中生成当前时间戳
-    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
-    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    # 获取东八区当前时间
+    current_time = get_utc8_time()
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -95,17 +100,41 @@ def get_malicious_hashes() -> list:
     return [{"hash": row[0], "description": row[1], "added_at": row[2]} for row in results]
 
 # 获取检测记录
-def get_detection_records(limit: int = 100) -> list:
-    """从数据库获取检测记录"""
+def get_detection_records(limit: int = 100, unique_hash: bool = False) -> list:
+    """从数据库获取检测记录
+    
+    Args:
+        limit: 返回记录的最大数量
+        unique_hash: 是否只返回每个hash的最新记录
+        
+    Returns:
+        检测记录列表
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        SELECT id, mcp_name, hash, description, security_issues, config, args, result, detection_type, detected_at
-        FROM detection_records
-        ORDER BY detected_at DESC
-        LIMIT ?
-    ''', (limit,))
+    if unique_hash:
+        # 只返回每个hash的最新记录
+        cursor.execute('''
+            SELECT t1.id, t1.mcp_name, t1.hash, t1.description, t1.security_issues, 
+                   t1.config, t1.args, t1.result, t1.detection_type, t1.detected_at
+            FROM detection_records t1
+            INNER JOIN (
+                SELECT hash, MAX(detected_at) as max_date
+                FROM detection_records
+                GROUP BY hash
+            ) t2 ON t1.hash = t2.hash AND t1.detected_at = t2.max_date
+            ORDER BY t1.detected_at DESC
+            LIMIT ?
+        ''', (limit,))
+    else:
+        # 返回所有记录
+        cursor.execute('''
+            SELECT id, mcp_name, hash, description, security_issues, config, args, result, detection_type, detected_at
+            FROM detection_records
+            ORDER BY detected_at DESC
+            LIMIT ?
+        ''', (limit,))
     
     results = cursor.fetchall()
     conn.close()
@@ -127,13 +156,52 @@ def get_detection_records(limit: int = 100) -> list:
     
     return records
 
+# 根据hash获取检测记录
+def get_detection_record_by_hash(code_hash: str) -> Optional[Dict[str, Any]]:
+    """根据hash获取最新的检测记录
+    
+    Args:
+        code_hash: 代码的hash值
+        
+    Returns:
+        检测记录或None（如果不存在）
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, mcp_name, hash, description, security_issues, config, args, result, detection_type, detected_at
+        FROM detection_records
+        WHERE hash = ?
+        ORDER BY detected_at DESC
+        LIMIT 1
+    ''', (code_hash,))
+    
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    return {
+        "id": row[0],
+        "mcp_name": row[1],
+        "hash": row[2],
+        "description": row[3],
+        "security_issues": json.loads(row[4]) if row[4] else [],
+        "config": json.loads(row[5]) if row[5] else None,
+        "args": json.loads(row[6]) if row[6] else None,
+        "result": json.loads(row[7]) if row[7] else None,
+        "detection_type": row[8],
+        "detected_at": row[9]
+    }
+
 # 记录静态检测结果
 def record_static_detection(mcp_name: str, code_hash: str, description: str, security_issues: List[str], config: Optional[Dict[str, Any]] = None):
     """记录静态检测结果"""
     
-    # 在程序中生成当前时间戳
-    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
-    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    # 获取东八区当前时间
+    current_time = get_utc8_time()
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -164,9 +232,8 @@ def record_dynamic_detection(mcp_name: str, code_hash: str, description: str, se
                            result: Optional[Any] = None):
     """记录动态检测结果"""
 
-    # 在程序中生成当前时间戳
-    tz_utc_8 = datetime.timezone(datetime.timedelta(hours=8))
-    current_time = datetime.datetime.now(tz_utc_8).strftime("%Y-%m-%d %H:%M:%S")
+    # 获取东八区当前时间
+    current_time = get_utc8_time()
     
     conn = get_db_connection()
     cursor = conn.cursor()

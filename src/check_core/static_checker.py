@@ -9,7 +9,8 @@ import pathlib
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 from db.database import (
-    is_malicious_hash, add_malicious_hash, record_static_detection
+    is_malicious_hash, add_malicious_hash, record_static_detection,
+    get_detection_record_by_hash
 )
 
 # MCP配置文件路径
@@ -103,6 +104,20 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
     """
     # 计算代码的hash值
     code_hash = hashlib.sha256(code.encode('utf-8')).hexdigest()
+    
+    # 检查数据库中是否已有该hash的检测记录
+    existing_record = get_detection_record_by_hash(code_hash)
+    if existing_record:
+        print(f"已存在检测记录，hash: {code_hash}，跳过重复检测")
+        return {
+            "status": "checked",
+            "mcp_name": mcp_name,
+            "hash": code_hash,
+            "security_issues_count": len(existing_record["security_issues"]),
+            "security_issues": existing_record["security_issues"],
+            "from_cache": True
+        }
+    
     # 检查是否在病毒库中
     if is_malicious_hash(code_hash):
         # 记录检测结果到数据库
@@ -164,7 +179,8 @@ def static_check(mcp_name: str, code: str, description: str = "", config: Option
         "mcp_name": mcp_name,
         "hash": code_hash,
         "security_issues_count": len(security_issues),
-        "security_issues": security_issues
+        "security_issues": security_issues,
+        "from_cache": False
     }
 
 

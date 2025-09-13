@@ -953,7 +953,8 @@
             try {
                 const limit = 20;
                 const offset = currentPage.records * limit;
-                const response = await fetch(`${API_BASE}/detection-records?skip=${offset}&limit=${limit}`);
+                // 默认获取每个hash的最新记录
+                const response = await fetch(`${API_BASE}/detection-records?skip=${offset}&limit=${limit}&unique_hash=true`);
                 const data = await response.json();
                 
                 tbody.innerHTML = '';
@@ -962,20 +963,25 @@
                     data.records.forEach(record => {
                         // 处理安全问题显示
                         let securityIssuesHTML = '';
-                        if (record.security_issues && record.security_issues.length > 0) {
-                            // 检查安全问题的类型并正确显示
-                            let issueCount = 0;
-                            if (Array.isArray(record.security_issues)) {
-                                issueCount = record.security_issues.length;
-                            } else if (typeof record.security_issues === 'string') {
-                                // 如果是字符串，尝试解析为数组
-                                try {
-                                    const parsed = JSON.parse(record.security_issues);
-                                    issueCount = Array.isArray(parsed) ? parsed.length : 1;
-                                } catch (e) {
-                                    issueCount = 1;
-                                }
+                        let issues = record.security_issues;
+                        
+                        // 如果security_issues是字符串，尝试解析为数组
+                        if (typeof issues === 'string') {
+                            try {
+                                issues = JSON.parse(issues);
+                                // 更新record中的security_issues为解析后的对象
+                                record.security_issues = issues;
+                            } catch (e) {
+                                // 如果解析失败，将其作为单个问题处理
+                                issues = [issues];
+                                // 更新record中的security_issues为解析后的数组
+                                record.security_issues = issues;
                             }
+                        }
+                        
+                        if (issues && issues.length > 0) {
+                            // 检查安全问题的类型并正确显示
+                            let issueCount = issues.length;
                             
                             securityIssuesHTML = `
                                 <div class="security-issues-cell">
@@ -1053,9 +1059,21 @@
             
             if (row) {
                 const record = JSON.parse(row.getAttribute('data-record'));
-                if (record.security_issues && record.security_issues.length > 0) {
+                let issues = record.security_issues;
+                
+                // 如果security_issues是字符串，尝试解析为数组
+                if (typeof issues === 'string') {
+                    try {
+                        issues = JSON.parse(issues);
+                    } catch (e) {
+                        // 如果解析失败，将其作为单个问题处理
+                        issues = [issues];
+                    }
+                }
+                
+                if (issues && issues.length > 0) {
                     let issuesHTML = '<div style="text-align: left;">';
-                    record.security_issues.forEach((issue, index) => {
+                    issues.forEach((issue, index) => {
                         // 检查issue是字符串还是对象
                         let issueType, issueDescription, issueLineNumber, issueCodeSnippet;
                         if (typeof issue === 'string') {
@@ -1074,6 +1092,7 @@
                         
                         issuesHTML += `
                             <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                <strong>问题描述:</strong> ${issueDescription}<br>
                                 ${issueLineNumber ? `<strong>行号:</strong> ${issueLineNumber}<br>` : ''}
                                 ${issueCodeSnippet ? `<strong>代码片段:</strong><pre style="background: #f5f5f5; padding: 5px; margin: 5px 0;">${escapeHtml(issueCodeSnippet)}</pre>` : ''}
                             </div>

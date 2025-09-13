@@ -81,10 +81,10 @@ async def get_malicious_hashes_api(skip: int = 0, limit: int = Query(100, le=100
         raise HTTPException(status_code=500, detail=f"查询时出错: {e}")
 
 @app.get("/api/detection-records")
-async def get_detection_records_api(skip: int = 0, limit: int = Query(100, le=1000)):
+async def get_detection_records_api(skip: int = 0, limit: int = Query(100, le=1000), unique_hash: bool = False):
     """获取检测记录"""
     try:
-        all_records = get_detection_records()
+        all_records = get_detection_records(unique_hash=unique_hash)
         # 实现分页
         paginated_records = all_records[skip:skip+limit]
         return {"status": "success", "count": len(paginated_records), "records": paginated_records}
